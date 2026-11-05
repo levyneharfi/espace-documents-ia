@@ -1,0 +1,14 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Serveur documents-ia",
+      "type": "shell",
+      "command": "bash ${workspaceFolder}/demarrer.sh",
+      "runOptions": { "runOn": "folderOpen" },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    }
+  ]
+}

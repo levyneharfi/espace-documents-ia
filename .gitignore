@@ -1,0 +1,7 @@
+
+/.venv/
+/documents_generes/
+/__pycache__/.venv/
+documents_generes/
+*.bak
+__pycache__/
