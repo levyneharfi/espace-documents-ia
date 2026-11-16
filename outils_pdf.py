@@ -1,4 +1,5 @@
 import json
+from time import perf_counter
 import re
 import subprocess
 import sys
@@ -14,8 +15,12 @@ from mcp.server.fastmcp import Image
 from serveur_mcp import mcp
 
 
-DOSSIER = Path(__file__).resolve().parent / "documents_generes"
+from rangement_documents import dossier_format, trouver_document
+DOSSIER = dossier_format("pdf")
 DOSSIER.mkdir(exist_ok=True)
+
+DOSSIER_SOURCES = DOSSIER.parent / "source" / "pdf"
+DOSSIER_SOURCES.mkdir(parents=True, exist_ok=True)
 
 VERROU_RENDU = Lock()
 
@@ -126,6 +131,8 @@ def executer_moteur(demande: dict, sortie: str) -> tuple[bytes, dict]:
             "Un rendu est déjà en cours. Réessayer après sa fin."
         )
 
+    debut_moteur = perf_counter()
+
     try:
         with TemporaryDirectory(prefix="documents-ia-") as temporaire:
             dossier = Path(temporaire)
@@ -183,6 +190,9 @@ def executer_moteur(demande: dict, sortie: str) -> tuple[bytes, dict]:
                 resultat.stdout.decode("utf-8")
             )
             informations["avertissements_moteur"] = details
+            informations["duree_moteur_secondes"] = round(
+                perf_counter() - debut_moteur, 3
+            )
 
             return fichier_sortie.read_bytes(), informations
 
@@ -191,35 +201,7 @@ def executer_moteur(demande: dict, sortie: str) -> tuple[bytes, dict]:
 
 
 def retrouver_pdf(fichier: str) -> Path:
-    nom = fichier.removeprefix("documents_generes/")
-
-    # Anciens fichiers comportant un identifiant aléatoire.
-    ancien_format = (
-        r"[A-Za-z0-9_-]{1,60}-[0-9a-f]{12}\.pdf"
-    )
-
-    # Nouveaux fichiers comportant une date et une heure.
-    nouveau_format = (
-        r"[A-Za-z0-9_-]{1,60}_"
-        r"[0-9]{4}-[0-9]{2}-[0-9]{2}_"
-        r"[0-9]{2}h[0-9]{2}m[0-9]{2}s"
-        r"(?:-v[0-9]{2,})?\.pdf"
-    )
-
-    if not (
-        re.fullmatch(ancien_format, nom)
-        or re.fullmatch(nouveau_format, nom)
-    ):
-        raise ValueError(
-            "Utiliser le nom exact d'un PDF créé par creer_pdf."
-        )
-
-    chemin = DOSSIER / nom
-
-    if chemin.is_symlink() or not chemin.is_file():
-        raise ValueError("PDF introuvable.")
-
-    return chemin
+    return trouver_document(fichier, {".pdf"})
 
 
 
@@ -230,6 +212,7 @@ def creer_pdf(
     profil: Literal[
         "chatgpt", "claude", "gemini", "libre"
     ] = "libre",
+    modele: str = "",
 ) -> dict:
     """Crée un PDF à partir d'un document HTML complet.
 
@@ -277,6 +260,7 @@ def creer_pdf(
     contenu_source = json.dumps(
         {
             "profil": profil,
+            "modele": modele.strip() or "non renseigne",
             "pages": informations["pages"],
             "cree_le": creation.isoformat(timespec="seconds"),
             "fuseau_horaire": "Europe/Paris",
@@ -293,7 +277,7 @@ def creer_pdf(
         identifiant = f"{base}{suffixe}"
 
         pdf = DOSSIER / f"{identifiant}.pdf"
-        source = DOSSIER / f"{identifiant}.source.json"
+        source = DOSSIER_SOURCES / f"{identifiant}.source.json"
 
         pdf_cree = False
         source_creee = False
@@ -335,9 +319,30 @@ def creer_pdf(
         break
 
 
+    from telechargements import creer_lien
+
+    try:
+        telechargement = creer_lien(
+            f"documents_generes/pdf/{pdf.name}"
+        )
+    except Exception:
+        telechargement = {
+            "statut": "indisponible",
+            "message": (
+                "PDF créé. Réessayer avec lien_telechargement."
+            ),
+        }
+
     return {
+        "mesures": {
+            "duree_moteur_secondes": informations[
+                "duree_moteur_secondes"
+            ],
+            "taille_html_octets": len(html.encode("utf-8")),
+        },
+        "telechargement": telechargement,
         "statut": "cree",
-        "fichier": f"documents_generes/{pdf.name}",
+        "fichier": f"documents_generes/pdf/{pdf.name}",
         "profil": profil,
         "pages": informations["pages"],
         "taille_octets": pdf.stat().st_size,
@@ -359,7 +364,7 @@ def lire_source_pdf(fichier: str) -> dict:
     Utiliser le chemin exact renvoyé lors de la création.
     """
     pdf = retrouver_pdf(fichier)
-    source = pdf.with_suffix(".source.json")
+    source = DOSSIER_SOURCES / pdf.with_suffix(".source.json").name
 
     if (
         source.is_symlink()
@@ -400,7 +405,7 @@ def apercu_pdf(fichier: str, page: int = 1) -> Image:
 def lister_pdf() -> list[str]:
     """Liste les PDF du dossier documents_generes."""
     return sorted(
-        f"documents_generes/{f.name}"
+        f"documents_generes/pdf/{f.name}"
         for f in DOSSIER.glob("*.pdf")
         if f.is_file() and not f.is_symlink()
     )

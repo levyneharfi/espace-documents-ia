@@ -6,10 +6,14 @@ import uvicorn
 from starlette.responses import PlainTextResponse
 
 from serveur_mcp import mcp
+import outils_apercus
+import outils_pptx
 import outils_pdf
+import controle_pdf
 import telechargements
 from telechargements import avec_telechargements
 import outils_documents
+import outils_excel
 
 
 # La clé est stockée hors du dossier du projet.

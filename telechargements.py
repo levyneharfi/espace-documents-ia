@@ -40,14 +40,14 @@ def _signature(nom: str, expiration: int) -> str:
 
 
 def _fichier_autorise(nom: str):
-    if not nom or "/" in nom or "\\" in nom or nom.startswith("."):
+    # Les URL continuent à signer le nom seul : anciens liens conservés.
+    if not nom or '/' in nom or '\\' in nom or nom.startswith('.'):
         return None
-    chemin = (DOSSIER / nom).resolve()
-    if chemin.parent != DOSSIER or chemin.suffix.lower() not in TYPES:
+    from rangement_documents import trouver_document
+    try:
+        return trouver_document(nom, set(TYPES))
+    except ValueError:
         return None
-    if not chemin.is_file():
-        return None
-    return chemin
 
 
 def _url_publique() -> str:
