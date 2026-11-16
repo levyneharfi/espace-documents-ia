@@ -1,3 +1,4 @@
+from images_documents import image_png
 import re
 from pathlib import Path
 from typing import Literal
@@ -14,15 +15,19 @@ from pydantic import BaseModel, Field
 from serveur_mcp import mcp
 
 
-DOSSIER = Path(__file__).resolve().parent / "documents_generes"
+from rangement_documents import dossier_format, trouver_document
+DOSSIER = dossier_format("docx")
 DOSSIER.mkdir(exist_ok=True)
 
 
 class BlocDocument(BaseModel):
     type: Literal[
         "titre", "paragraphe", "puces",
-        "tableau", "encadre", "saut_page"
+        "tableau", "encadre", "saut_page", "image", "svg"
     ]
+    image_base64: str = Field(default='', max_length=5400000)
+    svg: str = Field(default='', max_length=300000)
+    largeur_cm: float = Field(default=12, ge=0.5, le=19)
     texte: str = Field(default="", max_length=20000)
     niveau: int = Field(default=1, ge=1, le=3)
     alignement: Literal[
@@ -68,6 +73,8 @@ def creer_document(
       La première ligne sert d'en-tête.
     - encadre : texte dans un encadré coloré.
     - saut_page : commence une nouvelle page.
+    - image : image_base64 PNG/JPEG brut, largeur_cm, alignement, texte légende.
+    - svg : svg XML autonome, largeur_cm ; converti en PNG.
 
     Dans les paragraphes, puces et encadrés, **texte** donne du gras.
     couleur : code hexadécimal de six caractères, sans #.
@@ -160,6 +167,17 @@ def creer_document(
             ajouter_texte(cellule.paragraphs[0], bloc.texte)
             doc.add_paragraph()
 
+        elif bloc.type in ("image", "svg"):
+            from io import BytesIO
+            png = image_png(bloc.image_base64, bloc.svg)
+            p = doc.add_paragraph()
+            p.alignment = alignements[bloc.alignement]
+            p.add_run().add_picture(
+                BytesIO(png), width=Cm(min(bloc.largeur_cm, 21 - 2*marge_cm))
+            )
+            if bloc.texte:
+                ajouter_texte(doc.add_paragraph(), bloc.texte)
+
         elif bloc.type == "saut_page":
             doc.add_page_break()
 
@@ -189,7 +207,7 @@ def creer_document(
 
     return {
         "statut": "cree",
-        "fichier": f"documents_generes/{fichier.name}",
+        "fichier": f"documents_generes/docx/{fichier.name}",
         "taille_octets": fichier.stat().st_size,
         "recuperation": "Télécharger depuis l'explorateur de Codespaces.",
         "rendu_visuel_verifie": False,
@@ -200,7 +218,7 @@ def creer_document(
 def lister_documents() -> list[str]:
     """Liste les DOCX du dossier documents_generes, sans lire leur contenu."""
     return sorted(
-        f"documents_generes/{f.name}"
+        f"documents_generes/docx/{f.name}"
         for f in DOSSIER.glob("*.docx")
         if f.is_file()
     )

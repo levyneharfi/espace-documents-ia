@@ -18,11 +18,8 @@ MAX_CARTES = 30
 
 
 def _trouver(fichier: str) -> Path:
-    nom = Path(fichier).name
-    chemin = (DOSSIER / nom).resolve()
-    if chemin.parent != DOSSIER or chemin.suffix.lower() != ".pdf" or not chemin.is_file():
-        raise ValueError(f"PDF introuvable dans documents_generes : {nom}")
-    return chemin
+    from rangement_documents import trouver_document
+    return trouver_document(fichier, {'.pdf'})
 
 
 def _texte_par_page(chemin: Path):
